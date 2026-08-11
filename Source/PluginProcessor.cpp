@@ -942,8 +942,6 @@ void CodecCorruptorAudioProcessor::prepareToPlay(double sampleRate,
   auto &st = *instanceState;
   st.initialise(sampleRate, ch, frameSize);
   st.fp.setSeed((uint32_t)*apvts.getRawParameterValue("seed"));
-
-  setLatencySamples(frameSize);
 }
 
 void CodecCorruptorAudioProcessor::releaseResources() { instanceState.reset(); }
@@ -1017,7 +1015,6 @@ void CodecCorruptorAudioProcessor::processBlock(
 
   // Push input to inRB
   st.inRB.push(buffer, n);
-  const int inAvailAfterPush = st.inRB.available();
 
   // Process frames while available
   while (st.inRB.available() >= st.frameSize &&
@@ -1047,10 +1044,9 @@ void CodecCorruptorAudioProcessor::processBlock(
   }
 
   // Pop output for this block
-  if (st.outRB.available() < n) {
-    juce::ignoreUnused(inAvailAfterPush);
+  if (st.outRB.available() < n)
     return;
-  }
+
   st.outRB.pop(buffer, n);
 }
 
