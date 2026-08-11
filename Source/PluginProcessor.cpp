@@ -215,7 +215,7 @@ struct Predictor {
   void prepare(int orderIn) {
     setOrder(orderIn);
 
-    // initial coeffs (fallback)
+    // Initial predictor coefficients.
     for (int k = 0; k < order; ++k)
       coeff[(size_t)k] = 0.6f * std::pow(0.5f, (float)k);
 
@@ -933,22 +933,6 @@ void CodecCorruptorAudioProcessor::prepareToPlay(double sampleRate,
 
   const int ch = juce::jmax(
       1, juce::jmax(getTotalNumInputChannels(), getTotalNumOutputChannels()));
-
-  // Store in processor instance via static local singletons? No:
-  // We'll keep them in a local static inside processBlock? Not good.
-  // Instead, stash them as "processor state" using a lambda capture in
-  // processBlock. JUCE template does not give us member slots here, so we will
-  // use a heap state object via apvts.state. Simpler: attach to AudioProcessor
-  // as hidden members? But header is fixed.
-  // => We'll use a private static map keyed by this pointer (safe for one
-  // instance, but not ideal). For clarity and correctness, we will use a member
-  // via apvts.state PropertySet? Not suitable.
-
-  // Practical approach: store in the processor's "Properties" via
-  // getProperties() (JUCE PropertiesFile is not for realtime). So we need
-  // members. Therefore: easiest is to put state in this translation unit as a
-  // struct and keep pointers in processor. But header has no members. We'll use
-  // a static registry keyed by this pointer.
 
   // Set plugin latency to frame size (makes offline renders and alignment
   // correct)
