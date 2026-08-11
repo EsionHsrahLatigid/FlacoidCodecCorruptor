@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    name: Plugin build and integration tests
+    uses: EsionHsrahLatigid/juce-ci/.github/workflows/juce-cmake.yml@98fcb96e64011725ed842941b350afe013e9ba7d
+    with:
+      runs-on: macos-14
+      dependency-cache-key: juce-8.0.15
+      cmake-options: >-
+        -DFLACOIDCODECCORRUPTOR_BUILD_PLUGIN=ON
+        -DFLACOIDCODECCORRUPTOR_BUILD_TESTS=ON
+      build-targets: >-
+        FlacoidCodecCorruptor_Artifacts
+        FlacoidCodecCorruptorIntegrationTests
+      artifact-name: FlacoidCodecCorruptor-macOS
+      artifact-path: |
+        artifacts/Release/VST3/
+        artifacts/Release/AU/
