@@ -44,7 +44,7 @@ int main()
     constexpr double sampleRate = 44100.0;
     processor.prepareToPlay(sampleRate, 512);
     int generatedSamples = 0;
-    const int blockSizes[] { 32, 128, 512, 1024, 256, 64 };
+    const int blockSizes[] { 32, 128, 512, 1024, 256, 64, 2048, 17, 511, 513 };
 
     for (const auto blockSize : blockSizes)
     {
@@ -64,6 +64,28 @@ int main()
         for (int channel = 0; channel < audio.getNumChannels(); ++channel)
             for (int sample = 0; sample < audio.getNumSamples(); ++sample)
                 passed &= check(std::isfinite(audio.getSample(channel, sample)), "processed audio should remain finite");
+    }
+
+    for (int cycle = 0; cycle < 12; ++cycle)
+    {
+        const int blockSize = (cycle % 2 == 0 ? 37 : 1009);
+        juce::AudioBuffer<float> audio(2, blockSize);
+        for (int sample = 0; sample < blockSize; ++sample)
+        {
+            const auto value = static_cast<float>(0.15 * std::sin(2.0 * juce::MathConstants<double>::pi
+                                                                  * 330.0 * generatedSamples / sampleRate));
+            audio.setSample(0, sample, value);
+            audio.setSample(1, sample, -value);
+            ++generatedSamples;
+        }
+
+        juce::MidiBuffer midi;
+        processor.processBlock(audio, midi);
+
+        for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+            for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+                passed &= check(std::isfinite(audio.getSample(channel, sample)),
+                                "variable-size processed audio should remain finite");
     }
 
     if (passed)

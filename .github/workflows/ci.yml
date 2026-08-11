@@ -25,3 +25,4 @@ jobs:
       artifact-path: |
         artifacts/Release/VST3/
         artifacts/Release/AU/
+        artifacts/Release/Standalone/

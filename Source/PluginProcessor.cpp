@@ -349,6 +349,8 @@ struct FrameRouter {
 
     last.assign((size_t)ch, std::vector<float>((size_t)N, 0.0f));
     stash.assign((size_t)ch, std::vector<float>((size_t)N, 0.0f));
+    fragmentScratch.assign((size_t)N, 0.0f);
+    shiftScratch.assign((size_t)N, 0.0f);
     hasLast = false;
   }
 
@@ -478,8 +480,8 @@ private:
     }
   }
 
-  static void microRepeatWithXfade(float *x, int totalSamples, int start,
-                                   int len, int reps, int xfade) {
+  void microRepeatWithXfade(float *x, int totalSamples, int start,
+                            int len, int reps, int xfade) {
     if (len <= 1 || reps <= 1)
       return;
 
@@ -491,9 +493,10 @@ private:
     if (total <= 0)
       return;
 
-    std::vector<float> frag((size_t)len);
+    jassert((size_t)len <= fragmentScratch.size());
+    auto* frag = fragmentScratch.data();
     for (int i = 0; i < len; ++i)
-      frag[(size_t)i] = x[start + i];
+      frag[i] = x[start + i];
 
     int write = start;
     for (int r = 0; r < reps; ++r) {
@@ -501,7 +504,7 @@ private:
         const int idx = write + i;
         if (idx < 0 || totalSamples <= idx)
           continue;
-        x[idx] = frag[(size_t)i];
+        x[idx] = frag[i];
       }
 
       // small crossfade at repeat boundary
@@ -513,7 +516,7 @@ private:
           if (idx < 0 || totalSamples <= idx)
             continue;
           // blend with previous sample already there (gives "decoder edge")
-          x[idx] = (1.0f - t) * x[idx] + t * frag[(size_t)i];
+          x[idx] = (1.0f - t) * x[idx] + t * frag[i];
         }
       }
 
@@ -523,17 +526,18 @@ private:
     }
   }
 
-  static void shiftWindowInPlace(float *x, int start, int win, int shift) {
+  void shiftWindowInPlace(float *x, int start, int win, int shift) {
     if (shift == 0 || win <= 1)
       return;
 
-    std::vector<float> tmp((size_t)win, 0.0f);
+    jassert((size_t)win <= shiftScratch.size());
+    auto* tmp = shiftScratch.data();
     for (int i = 0; i < win; ++i) {
       const int src = i - shift;
-      tmp[(size_t)i] = (src >= 0 && src < win) ? x[start + src] : 0.0f;
+      tmp[i] = (src >= 0 && src < win) ? x[start + src] : 0.0f;
     }
     for (int i = 0; i < win; ++i)
-      x[start + i] = tmp[(size_t)i];
+      x[start + i] = tmp[i];
   }
 
   int ch{2};
@@ -543,6 +547,8 @@ private:
   bool hasLast{false};
   std::vector<std::vector<float>> last;
   std::vector<std::vector<float>> stash;
+  std::vector<float> fragmentScratch;
+  std::vector<float> shiftScratch;
 };
 
 //============================== Frame Processor ==============================
@@ -551,7 +557,7 @@ struct FrameProcessor {
   // Returns coeffs a[0..order-1] such that p[n] = sum a[k]*x[n-1-k]
   void computeLpc(const float *xIn, int N, int order,
                   std::vector<float> &outA) {
-    outA.assign((size_t)order, 0.0f);
+    std::fill(outA.begin(), outA.begin() + order, 0.0f);
 
     // autocorr r[0..order]
     for (int k = 0; k <= order; ++k) {
@@ -577,7 +583,7 @@ struct FrameProcessor {
       float kappa = -acc / (E[(size_t)i] + 1.0e-12f);
 
       // update a
-      std::vector<float> aPrev = aTmp;
+      std::copy(aTmp.begin(), aTmp.begin() + order, aPrev.begin());
       aTmp[(size_t)i] = kappa;
       for (int j = 0; j < i; ++j)
         aTmp[(size_t)j] = aPrev[(size_t)j] + kappa * aPrev[(size_t)(i - 1 - j)];
@@ -587,7 +593,7 @@ struct FrameProcessor {
         E[(size_t)i + 1] = 1.0e-12f;
     }
 
-    outA = aTmp;
+    std::copy(aTmp.begin(), aTmp.begin() + order, outA.begin());
   }
 
   void prepare(double sr, int channels, int frameSize) {
@@ -608,6 +614,7 @@ struct FrameProcessor {
     autocorr.assign((size_t)(lpcOrder + 1), 0.0f);
     E.assign((size_t)(lpcOrder + 1), 0.0f);
     aTmp.assign((size_t)lpcOrder, 0.0f);
+    aPrev.assign((size_t)lpcOrder, 0.0f);
 
     frameCounter = 0;
     lpcUpdateInterval = 8;
@@ -815,6 +822,7 @@ struct FrameProcessor {
   std::vector<float> autocorr;
   std::vector<float> E;
   std::vector<float> aTmp;
+  std::vector<float> aPrev;
 };
 } // namespace
 
@@ -977,24 +985,17 @@ void CodecCorruptorAudioProcessor::processBlock(
   const float wet = apvts.getRawParameterValue("wet")->load();
   const int seed = (int)apvts.getRawParameterValue("seed")->load();
 
-  if (actualChannels != st.channels) {
-    st.initialise(getSampleRate(), actualChannels, n);
-    st.fp.setSeed((uint32_t)seed);
-    lastSeed = seed;
-    ++st.reinitCounter;
+  if (actualChannels != st.lastBufferChannels) {
     st.lastBufferChannels = actualChannels;
     st.reinitStreak = 0;
-  }
-
-  if (st.frameSize != n) {
-    st.initialise(getSampleRate(), actualChannels, n);
-    st.fp.setSeed((uint32_t)seed);
-    lastSeed = seed;
   }
 
   // Ensure buffer channel count consistency
   for (int c = inputChannels; c < bufferChannels; ++c)
     buffer.clear(c, 0, n);
+
+  if (actualChannels != st.channels)
+    return;
 
   if (wet <= 0.0001f)
     return;
@@ -1027,7 +1028,8 @@ void CodecCorruptorAudioProcessor::processBlock(
     st.inRB.popFrame(framePtrs, st.frameSize);
 
     // Copy frameBuf into outFrameBuf for in-place processing
-    st.outFrameBuf.makeCopyOf(st.frameBuf, true);
+    for (int c = 0; c < st.channels; ++c)
+      st.outFrameBuf.copyFrom(c, 0, st.frameBuf, c, 0, st.frameSize);
 
     float *outPtrs[2]{st.outFrameBuf.getWritePointer(0),
                       (st.channels >= 2 ? st.outFrameBuf.getWritePointer(1)
