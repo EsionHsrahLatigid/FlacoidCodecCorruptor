@@ -11,6 +11,35 @@ bool check(bool condition, const char* message)
         std::cerr << "[FAIL] " << message << '\n';
     return condition;
 }
+
+void setFloatParameter(CodecCorruptorAudioProcessor& processor, const char* parameterID, float value)
+{
+    if (auto* parameter = processor.apvts.getParameter(parameterID))
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+}
+
+bool samplesAreSilent(const juce::AudioBuffer<float>& audio, int startSample, int numSamples)
+{
+    for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+        for (int sample = startSample; sample < startSample + numSamples; ++sample)
+            if (std::abs(audio.getSample(channel, sample)) > 1.0e-7f)
+                return false;
+
+    return true;
+}
+
+bool samplesAreNotDry(const juce::AudioBuffer<float>& audio, int startSample, int numSamples, float leftDryValue, float rightDryValue)
+{
+    for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+    {
+        const auto dryValue = channel == 0 ? leftDryValue : rightDryValue;
+        for (int sample = startSample; sample < startSample + numSamples; ++sample)
+            if (std::abs(audio.getSample(channel, sample) - dryValue) <= 1.0e-7f)
+                return false;
+    }
+
+    return true;
+}
 } // namespace
 
 int main()
@@ -42,6 +71,45 @@ int main()
     }
 
     constexpr double sampleRate = 44100.0;
+
+    {
+        CodecCorruptorAudioProcessor latencyProcessor;
+        setFloatParameter(latencyProcessor, "wet", 1.0f);
+        latencyProcessor.prepareToPlay(sampleRate, 512);
+
+        juce::AudioBuffer<float> audio(2, 128);
+        audio.clear();
+        for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+            for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+                audio.setSample(channel, sample, channel == 0 ? 0.375f : -0.375f);
+
+        juce::MidiBuffer midi;
+        latencyProcessor.processBlock(audio, midi);
+
+        passed &= check(samplesAreSilent(audio, 0, audio.getNumSamples()),
+                        "wet variable-block cold start should output latency silence, not current dry input");
+    }
+
+    {
+        CodecCorruptorAudioProcessor latencyProcessor;
+        setFloatParameter(latencyProcessor, "wet", 1.0f);
+        latencyProcessor.prepareToPlay(sampleRate, 512);
+
+        juce::AudioBuffer<float> audio(2, 768);
+        audio.clear();
+        for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+            for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+                audio.setSample(channel, sample, channel == 0 ? 0.25f : -0.25f);
+
+        juce::MidiBuffer midi;
+        latencyProcessor.processBlock(audio, midi);
+
+        passed &= check(samplesAreSilent(audio, 512, 256),
+                        "wet variable-block partial underrun should silence unavailable delayed output");
+        passed &= check(samplesAreNotDry(audio, 512, 256, 0.25f, -0.25f),
+                        "wet variable-block partial underrun should not leave dry input in the underrun tail");
+    }
+
     processor.prepareToPlay(sampleRate, 512);
     int generatedSamples = 0;
     const int blockSizes[] { 32, 128, 512, 1024, 256, 64, 2048, 17, 511, 513 };

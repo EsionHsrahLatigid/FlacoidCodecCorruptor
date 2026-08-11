@@ -1045,10 +1045,9 @@ void CodecCorruptorAudioProcessor::processBlock(
     st.outRB.pushFrame(pushPtrsConst, st.frameSize);
   }
 
-  // Pop output for this block
-  if (st.outRB.available() < n)
-    return;
-
+  // Preserve the declared frame latency in variable-block mode. If the delayed
+  // output ring underruns, RingBuffer::pop writes the available delayed samples
+  // and clears the remainder instead of leaking the current dry input.
   st.outRB.pop(buffer, n);
 }
 
