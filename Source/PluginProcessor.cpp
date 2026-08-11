@@ -858,6 +858,12 @@ struct CodecCorruptorAudioProcessor::InstanceState {
 
     frameBuf.setSize(ch, frameSize);
     outFrameBuf.setSize(ch, frameSize);
+    outFrameBuf.clear();
+
+    const float *latencyFrame[2]{
+        outFrameBuf.getReadPointer(0),
+        (ch >= 2 ? outFrameBuf.getReadPointer(1) : nullptr)};
+    outRB.pushFrame(latencyFrame, frameSize);
 
     juce::ignoreUnused(sampleRate);
   }
@@ -997,21 +1003,10 @@ void CodecCorruptorAudioProcessor::processBlock(
   if (actualChannels != st.channels)
     return;
 
-  if (wet <= 0.0001f)
-    return;
-
   // Update seed if changed (cheap check)
   if (seed != lastSeed) {
     st.fp.setSeed((uint32_t)seed);
     lastSeed = seed;
-  }
-
-  if (st.frameSize == n) {
-    float *ioPtrs[2]{buffer.getWritePointer(0),
-                     (st.channels >= 2 ? buffer.getWritePointer(1) : nullptr)};
-    st.fp.processFrame(ioPtrs, intensity, rateHz, duration, resync, stereo,
-                       msMode && (st.channels >= 2), wet);
-    return;
   }
 
   // Push input to inRB
@@ -1027,27 +1022,34 @@ void CodecCorruptorAudioProcessor::processBlock(
                                           : nullptr)};
     st.inRB.popFrame(framePtrs, st.frameSize);
 
-    // Copy frameBuf into outFrameBuf for in-place processing
-    for (int c = 0; c < st.channels; ++c)
-      st.outFrameBuf.copyFrom(c, 0, st.frameBuf, c, 0, st.frameSize);
-
-    float *outPtrs[2]{st.outFrameBuf.getWritePointer(0),
-                      (st.channels >= 2 ? st.outFrameBuf.getWritePointer(1)
-                                        : nullptr)};
-
-    st.fp.processFrame(outPtrs, intensity, rateHz, duration, resync, stereo,
-                       msMode, wet);
-
-    // Push processed frame to outRB
     const float *pushPtrsConst[2]{
-        st.outFrameBuf.getReadPointer(0),
-        (st.channels >= 2 ? st.outFrameBuf.getReadPointer(1) : nullptr)};
+        st.frameBuf.getReadPointer(0),
+        (st.channels >= 2 ? st.frameBuf.getReadPointer(1) : nullptr)};
+
+    if (wet > 0.0001f) {
+      // Copy frameBuf into outFrameBuf for in-place processing
+      for (int c = 0; c < st.channels; ++c)
+        st.outFrameBuf.copyFrom(c, 0, st.frameBuf, c, 0, st.frameSize);
+
+      float *outPtrs[2]{st.outFrameBuf.getWritePointer(0),
+                        (st.channels >= 2 ? st.outFrameBuf.getWritePointer(1)
+                                          : nullptr)};
+
+      st.fp.processFrame(outPtrs, intensity, rateHz, duration, resync, stereo,
+                         msMode, wet);
+
+      pushPtrsConst[0] = st.outFrameBuf.getReadPointer(0);
+      pushPtrsConst[1] =
+          (st.channels >= 2 ? st.outFrameBuf.getReadPointer(1) : nullptr);
+    }
+
+    // Push delayed dry or processed frame to outRB
     st.outRB.pushFrame(pushPtrsConst, st.frameSize);
   }
 
-  // Preserve the declared frame latency in variable-block mode. If the delayed
-  // output ring underruns, RingBuffer::pop writes the available delayed samples
-  // and clears the remainder instead of leaking the current dry input.
+  // Preserve the declared frame latency. If the delayed output ring underruns,
+  // RingBuffer::pop writes the available delayed samples and clears the
+  // remainder instead of leaking the current dry input.
   st.outRB.pop(buffer, n);
 }
 

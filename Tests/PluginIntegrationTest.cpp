@@ -40,6 +40,46 @@ bool samplesAreNotDry(const juce::AudioBuffer<float>& audio, int startSample, in
 
     return true;
 }
+
+int findFirstAudibleSample(CodecCorruptorAudioProcessor& processor, const int* blockSizes, int numBlocks)
+{
+    int firstAudible = -1;
+    int globalSample = 0;
+    bool impulsePending = true;
+
+    for (int blockIndex = 0; blockIndex < numBlocks; ++blockIndex)
+    {
+        juce::AudioBuffer<float> audio(2, blockSizes[blockIndex]);
+        audio.clear();
+
+        if (impulsePending)
+        {
+            audio.setSample(0, 0, 0.5f);
+            audio.setSample(1, 0, -0.5f);
+            impulsePending = false;
+        }
+
+        juce::MidiBuffer midi;
+        processor.processBlock(audio, midi);
+
+        for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+        {
+            if (std::abs(audio.getSample(0, sample)) > 1.0e-5f
+                || std::abs(audio.getSample(1, sample)) > 1.0e-5f)
+            {
+                firstAudible = globalSample + sample;
+                break;
+            }
+        }
+
+        if (firstAudible >= 0)
+            break;
+
+        globalSample += audio.getNumSamples();
+    }
+
+    return firstAudible;
+}
 } // namespace
 
 int main()
@@ -104,10 +144,33 @@ int main()
         juce::MidiBuffer midi;
         latencyProcessor.processBlock(audio, midi);
 
-        passed &= check(samplesAreSilent(audio, 512, 256),
-                        "wet variable-block partial underrun should silence unavailable delayed output");
+        passed &= check(samplesAreSilent(audio, 0, 512),
+                        "wet variable-block oversized cold start should output one frame of latency silence");
         passed &= check(samplesAreNotDry(audio, 512, 256, 0.25f, -0.25f),
-                        "wet variable-block partial underrun should not leave dry input in the underrun tail");
+                        "wet variable-block delayed output should not leave current dry input after latency silence");
+    }
+
+    {
+        const float wetValues[] { 0.0f, 0.5f, 1.0f };
+        const int exactBlocks[] { 512, 512, 512 };
+        const int irregularBlocks[] { 128, 384, 257, 255, 128 };
+
+        for (const auto wetValue : wetValues)
+        {
+            CodecCorruptorAudioProcessor exactProcessor;
+            setFloatParameter(exactProcessor, "wet", wetValue);
+            setFloatParameter(exactProcessor, "intensity", 0.0f);
+            exactProcessor.prepareToPlay(sampleRate, 512);
+            passed &= check(findFirstAudibleSample(exactProcessor, exactBlocks, 3) == 512,
+                            "exact frame blocks should make an input impulse first audible after reported latency");
+
+            CodecCorruptorAudioProcessor irregularProcessor;
+            setFloatParameter(irregularProcessor, "wet", wetValue);
+            setFloatParameter(irregularProcessor, "intensity", 0.0f);
+            irregularProcessor.prepareToPlay(sampleRate, 512);
+            passed &= check(findFirstAudibleSample(irregularProcessor, irregularBlocks, 5) == 512,
+                            "irregular variable blocks should make an input impulse first audible after reported latency");
+        }
     }
 
     processor.prepareToPlay(sampleRate, 512);

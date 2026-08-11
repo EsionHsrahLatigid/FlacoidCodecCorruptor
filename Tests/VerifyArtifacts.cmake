@@ -27,6 +27,19 @@ if(FLACOIDCODECCORRUPTOR_EXPECT_AU)
         message(FATAL_ERROR "Missing staged VST3 moduleinfo.json: ${module_info}")
     endif()
 
+    if(NOT DEFINED Python3_EXECUTABLE)
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    endif()
+
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} -m json.tool "${module_info}"
+        RESULT_VARIABLE json_result
+        OUTPUT_QUIET
+        ERROR_VARIABLE json_error)
+    if(NOT json_result EQUAL 0)
+        message(FATAL_ERROR "Invalid strict JSON in ${module_info}: ${json_error}")
+    endif()
+
     if(NOT EXISTS "${au}")
         message(FATAL_ERROR "Missing staged AU: ${au}")
     endif()

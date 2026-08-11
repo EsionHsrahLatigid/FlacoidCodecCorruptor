@@ -13,6 +13,7 @@ set(FLACOIDCODECCORRUPTOR_ARTIFACT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/artifacts" C
 
 if(FLACOIDCODECCORRUPTOR_BUILD_PLUGIN)
   include(FetchContent)
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/CMakeLists.txt")
     add_subdirectory(JUCE)
@@ -81,6 +82,9 @@ if(FLACOIDCODECCORRUPTOR_BUILD_PLUGIN)
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${flacoid_staged_products}/Standalone"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${flacoid_juce_products}/VST3" "${flacoid_staged_products}/VST3"
+    COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NormalizeVst3ModuleInfo.py"
+            "${flacoid_staged_products}/VST3/FlacoidCodecCorruptor.vst3/Contents/Resources/moduleinfo.json"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${flacoid_juce_products}/Standalone" "${flacoid_staged_products}/Standalone")
 
@@ -123,6 +127,7 @@ if(FLACOIDCODECCORRUPTOR_BUILD_PLUGIN)
       COMMAND ${CMAKE_COMMAND}
               -DFLACOIDCODECCORRUPTOR_STAGED_DIR=${FLACOIDCODECCORRUPTOR_ARTIFACT_DIR}/$<CONFIG>
               -DFLACOIDCODECCORRUPTOR_EXPECT_AU=$<BOOL:${APPLE}>
+              -DPython3_EXECUTABLE=${Python3_EXECUTABLE}
               -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/VerifyArtifacts.cmake)
   endif()
 endif()
