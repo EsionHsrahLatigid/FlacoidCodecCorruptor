@@ -115,10 +115,12 @@ if(FLACOIDCODECCORRUPTOR_BUILD_PLUGIN)
     list(APPEND flacoid_stage_commands
       COMMAND ${CMAKE_COMMAND} -E rm -rf "${flacoid_staged_products}/vst3/flacoidcodeccorruptor_vst3_plugin.vst3"
       COMMAND ${CMAKE_COMMAND} -E copy_directory "${flacoid_juce_products}/VST3/FlacoidCodecCorruptor.vst3" "${flacoid_staged_products}/vst3/flacoidcodeccorruptor_vst3_plugin.vst3"
+      COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NormalizeVst3ModuleInfo.py" "${flacoid_staged_products}/vst3/flacoidcodeccorruptor_vst3_plugin.vst3/Contents/Resources/moduleinfo.json"
       COMMAND ${CMAKE_COMMAND} -E copy "${flacoid_juce_products}/Standalone/FlacoidCodecCorruptor.exe" "${flacoid_staged_products}/standalone/flacoidcodeccorruptor_standalone_plugin.exe")
   else()
     list(APPEND flacoid_stage_commands
       COMMAND ${CMAKE_COMMAND} -E copy_directory "${flacoid_juce_products}/VST3/FlacoidCodecCorruptor.vst3" "${flacoid_staged_products}/vst3/flacoidcodeccorruptor_vst3_plugin.vst3"
+      COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NormalizeVst3ModuleInfo.py" "${flacoid_staged_products}/vst3/flacoidcodeccorruptor_vst3_plugin.vst3/Contents/Resources/moduleinfo.json"
       COMMAND ${CMAKE_COMMAND} -E copy "${flacoid_juce_products}/Standalone/FlacoidCodecCorruptor" "${flacoid_staged_products}/standalone/flacoidcodeccorruptor_standalone_plugin")
   endif()
 
