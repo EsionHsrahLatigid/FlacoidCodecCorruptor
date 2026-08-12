@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 
 #include <cmath>
+#include <functional>
 #include <iostream>
 
 namespace
@@ -80,6 +82,60 @@ int findFirstAudibleSample(CodecCorruptorAudioProcessor& processor, const int* b
 
     return firstAudible;
 }
+
+bool hasForbiddenRedPixel(juce::Component& component)
+{
+    juce::Image image(juce::Image::RGB, component.getWidth(), component.getHeight(), true);
+    juce::Graphics graphics(image);
+    component.paintEntireComponent(graphics, true);
+
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            const auto colour = image.getPixelAt(x, y);
+            if (colour.getRed() > 180 && colour.getGreen() < 96 && colour.getBlue() < 96)
+                return true;
+        }
+
+    return false;
+}
+
+bool componentTreeHasUsableControls(juce::Component& root)
+{
+    bool passed = true;
+    int interactiveCount = 0;
+    std::function<void(juce::Component&)> visit = [&](juce::Component& component)
+    {
+        if (dynamic_cast<juce::Slider*>(&component) != nullptr
+            || dynamic_cast<juce::ToggleButton*>(&component) != nullptr)
+        {
+            ++interactiveCount;
+            passed &= check(component.getWidth() >= 24 && component.getHeight() >= 24,
+                            "editor controls should keep at least 24px hit areas");
+        }
+
+        for (int index = 0; index < component.getNumChildComponents(); ++index)
+            visit(*component.getChildComponent(index));
+    };
+    visit(root);
+    passed &= check(interactiveCount == 8, "editor should expose all seven sliders and M/S toggle");
+    return passed;
+}
+
+bool verifyEditorContract(CodecCorruptorAudioProcessor& processor)
+{
+    CodecCorruptorAudioProcessorEditor editor(processor);
+    editor.resized();
+
+    bool passed = true;
+    passed &= check(editor.getWidth() == ehl::juce_design::Metrics::defaultWidth
+                       && editor.getHeight() == ehl::juce_design::Metrics::defaultHeight,
+                   "editor should use the shared EHL default size");
+    passed &= check(editor.isResizable(), "editor should be resizable within shared EHL limits");
+    passed &= check(componentTreeHasUsableControls(editor), "editor control tree should remain usable");
+    passed &= check(!hasForbiddenRedPixel(editor), "editor should not retain red/neon accent pixels");
+    return passed;
+}
 } // namespace
 
 int main()
@@ -89,6 +145,7 @@ int main()
     bool passed = true;
 
     passed &= check(processor.getName() == "FlacoidCodecCorruptor", "product name should match EHL identity");
+    passed &= verifyEditorContract(processor);
     passed &= check(!processor.acceptsMidi(), "processor should not accept MIDI");
     passed &= check(!processor.isMidiEffect(), "processor should be an audio effect");
 

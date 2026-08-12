@@ -1,0 +1,3 @@
+[submodule "modules/juce-ehl-design-module"]
+	path = modules/juce-ehl-design-module
+	url = https://github.com/EsionHsrahLatigid/juce-ehl-design-module.git

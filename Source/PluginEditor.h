@@ -2,21 +2,31 @@
 
 #include "PluginProcessor.h"
 #include <JuceHeader.h>
+#include <ehl/juce_design/EhlDesign.h>
 
 class CodecCorruptorAudioProcessorEditor final
-    : public juce::AudioProcessorEditor {
+    : public juce::AudioProcessorEditor,
+      private juce::Timer {
 public:
   explicit CodecCorruptorAudioProcessorEditor(CodecCorruptorAudioProcessor &);
-  ~CodecCorruptorAudioProcessorEditor() override = default;
+  ~CodecCorruptorAudioProcessorEditor() override;
 
   void paint(juce::Graphics &) override;
   void resized() override;
 
 private:
-  CodecCorruptorAudioProcessor &processor;
+  void timerCallback() override;
+  void updateDisplay();
+
+  CodecCorruptorAudioProcessor &audioProcessor;
+
+  ehl::juce_design::LookAndFeel lookAndFeel;
+  ehl::juce_design::ParameterDisplay display{ehl::juce_design::DisplayKind::bitcrusher};
 
   juce::Slider intensity, rate, duration, resync, stereo, wet, seed;
   juce::ToggleButton msMode;
+  juce::Label intensityLabel, rateLabel, durationLabel, resyncLabel,
+      stereoLabel, wetLabel, seedLabel;
 
   using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
   using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;

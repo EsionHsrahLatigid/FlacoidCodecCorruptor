@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "engine-debug",
+      "displayName": "Engine Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/engine-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FLACOIDCODECCORRUPTOR_BUILD_PLUGIN": "ON",
+        "FLACOIDCODECCORRUPTOR_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "plugin-release",
+      "displayName": "Plugin Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/plugin-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "FLACOIDCODECCORRUPTOR_BUILD_PLUGIN": "ON",
+        "FLACOIDCODECCORRUPTOR_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "engine-debug",
+      "configurePreset": "engine-debug",
+      "targets": [
+        "FlacoidCodecCorruptorIntegrationTests"
+      ]
+    },
+    {
+      "name": "plugin-release",
+      "configurePreset": "plugin-release",
+      "targets": [
+        "ehl_stage_products",
+        "FlacoidCodecCorruptorIntegrationTests"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "engine-debug",
+      "configurePreset": "engine-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "plugin-release",
+      "configurePreset": "plugin-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
