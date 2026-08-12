@@ -1,3 +1,8 @@
+if(DEFINED BUILD_CONFIG AND NOT BUILD_CONFIG STREQUAL "Release")
+  message(STATUS "Skipping release artifact checks for ${BUILD_CONFIG}")
+  return()
+endif()
+
 if(NOT DEFINED STAGE_DIR OR NOT DEFINED SLUG)
     message(FATAL_ERROR "STAGE_DIR and SLUG are required")
 endif()

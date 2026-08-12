@@ -152,6 +152,7 @@ if(FLACOIDCODECCORRUPTOR_BUILD_PLUGIN)
     add_test(
       NAME FlacoidCodecCorruptorArtifactChecks
       COMMAND ${CMAKE_COMMAND}
+              -DBUILD_CONFIG=$<CONFIG>
               -DSTAGE_DIR=${flacoid_staged_products}
               -DSLUG=flacoidcodeccorruptor
               -DEXPECT_AU=$<BOOL:${APPLE}>
